@@ -15,17 +15,31 @@ A self-hosted web interface for Claude Code CLI that provides browser-based acce
 
 ## Quick Start
 
-### Prerequisites
+### One-Line Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | bash
+```
+
+Or with your API key:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | ANTHROPIC_API_KEY=sk-ant-... bash
+```
+
+### Manual Installation
+
+#### Prerequisites
 
 - Docker and Docker Compose
 - Anthropic API key
 
-### Running with Docker Compose
+#### Steps
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd claude-code-web
+   git clone https://github.com/CyberTechArmor/WEBCLI.git
+   cd WEBCLI
    ```
 
 2. Set your API key (optional - can also be set in UI):
@@ -35,10 +49,10 @@ A self-hosted web interface for Claude Code CLI that provides browser-based acce
 
 3. Build and start the container:
    ```bash
-   docker-compose up --build
+   docker-compose up --build -d
    ```
 
-4. Open your browser to `http://localhost:3000`
+4. Open your browser to `http://localhost:3210`
 
 5. If you didn't set the API key via environment variable, click the settings icon and enter your API key
 
@@ -47,9 +61,10 @@ A self-hosted web interface for Claude Code CLI that provides browser-based acce
 ## Architecture
 
 ```
-claude-code-web/
+WEBCLI/
 ├── Dockerfile              # Container definition
 ├── docker-compose.yml      # Docker Compose configuration
+├── install.sh              # One-line installer script
 ├── backend/                # Node.js/Express backend
 │   ├── src/
 │   │   ├── index.ts       # Express + WebSocket server
@@ -182,8 +197,14 @@ Connect to `/ws` for real-time communication.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `ANTHROPIC_API_KEY` | Anthropic API key | (none) |
-| `PORT` | Server port | 3000 |
+| `PORT` | Server port (internal) | 3000 |
 | `NODE_ENV` | Environment | production |
+
+### Port Mapping
+
+| External | Internal | Description |
+|----------|----------|-------------|
+| 3210 | 3000 | Web interface |
 
 ### Volume Mounts
 
@@ -192,6 +213,25 @@ Connect to `/ws` for real-time communication.
 | `/home/claude/.claude` | Claude Code configuration |
 | `/home/claude/.anthropic` | API credentials |
 | `/home/claude/projects` | Working directory for projects |
+
+## Management Commands
+
+```bash
+# Start the service
+docker-compose up -d
+
+# Stop the service
+docker-compose down
+
+# View logs
+docker-compose logs -f
+
+# Rebuild after updates
+docker-compose up --build -d
+
+# Restart the service
+docker-compose restart
+```
 
 ## Development
 
@@ -247,7 +287,7 @@ docker exec -it claude-code-web claude --version
 
 Check that the backend is running and accessible:
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost:3210/api/health
 ```
 
 ### Permission denied errors
@@ -257,10 +297,17 @@ Ensure the `claude` user has proper permissions:
 docker exec -it claude-code-web ls -la /home/claude
 ```
 
+### Container won't start
+
+Check Docker logs:
+```bash
+docker-compose logs claude-code-web
+```
+
 ## Security Considerations
 
 - **API Key Storage**: API keys are stored in the container volume. In production, consider using secrets management.
-- **Network**: The container exposes port 3000. Use a reverse proxy (nginx, traefik) for HTTPS in production.
+- **Network**: The container exposes port 3210. Use a reverse proxy (nginx, traefik) for HTTPS in production.
 - **Permissions**: Claude Code runs as a non-root user inside the container.
 
 ## License
@@ -269,4 +316,4 @@ MIT
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or pull request.
+Contributions are welcome! Please open an issue or pull request at [https://github.com/CyberTechArmor/WEBCLI](https://github.com/CyberTechArmor/WEBCLI).
