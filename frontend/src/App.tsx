@@ -1,4 +1,3 @@
-import React from 'react';
 import { Header } from './components/Header';
 import { ChatThread } from './components/ChatThread';
 import { InputArea } from './components/InputArea';

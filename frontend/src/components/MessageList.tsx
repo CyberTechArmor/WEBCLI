@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Message, useStore } from '../store';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -64,7 +64,6 @@ function ThinkingMessage({ message }: { message: Message }) {
 
 function ToolMessage({ message }: { message: Message }) {
   const isStart = message.toolStatus === 'start';
-  const icon = isStart ? '...' : 'OK';
   const statusClass = isStart ? 'start' : 'end';
 
   return (
