@@ -6,9 +6,14 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | bash
 #
-# Or with options:
+# Or with options (recommended for non-interactive install):
 #   curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | \
 #     DOMAIN=claude.example.com PORT=3210 bash
+#
+# Or download and run:
+#   wget https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh
+#   chmod +x install.sh
+#   ./install.sh
 #
 
 set -e
@@ -25,6 +30,51 @@ NC='\033[0m' # No Color
 REPO_URL="https://github.com/CyberTechArmor/WEBCLI.git"
 IMAGE_NAME="ghcr.io/cybertecharmor/webcli:latest"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/claude-code-web}"
+
+# Check if we can read from terminal (for interactive prompts)
+CAN_PROMPT=false
+if [ -t 0 ]; then
+    CAN_PROMPT=true
+elif [ -e /dev/tty ]; then
+    CAN_PROMPT=true
+fi
+
+# Function to read input (works with piped scripts)
+read_input() {
+    local prompt="$1"
+    local default="$2"
+    local result=""
+
+    if [ "$CAN_PROMPT" = true ]; then
+        if [ -t 0 ]; then
+            read -p "$prompt" result
+        else
+            read -p "$prompt" result < /dev/tty
+        fi
+    fi
+
+    echo "${result:-$default}"
+}
+
+# Function to read single character
+read_char() {
+    local prompt="$1"
+    local result=""
+
+    if [ "$CAN_PROMPT" = true ]; then
+        if [ -t 0 ]; then
+            read -p "$prompt" -n 1 -r result
+            echo
+        else
+            read -p "$prompt" -n 1 -r result < /dev/tty
+            echo
+        fi
+    else
+        result="y"  # Default to yes for non-interactive
+    fi
+
+    echo "$result"
+}
 
 # Print banner
 print_banner() {
@@ -89,25 +139,31 @@ prompt_configuration() {
 
     # Domain configuration
     if [ -z "$DOMAIN" ]; then
-        echo -e "${YELLOW}Enter the domain or IP address for accessing the web interface.${NC}"
-        echo -e "${YELLOW}Use 'localhost' for local access only, or your domain/IP for remote access.${NC}"
-        echo ""
-        read -p "Domain [localhost]: " DOMAIN
-        DOMAIN="${DOMAIN:-localhost}"
+        if [ "$CAN_PROMPT" = true ]; then
+            echo -e "${YELLOW}Enter the domain or IP address for accessing the web interface.${NC}"
+            echo -e "${YELLOW}Use 'localhost' for local access only, or your domain/IP for remote access.${NC}"
+            echo ""
+            DOMAIN=$(read_input "Domain [localhost]: " "localhost")
+        else
+            DOMAIN="localhost"
+        fi
     fi
     echo -e "${GREEN}Domain: $DOMAIN${NC}"
 
     # Port configuration
     if [ -z "$PORT" ]; then
-        read -p "Port [3210]: " PORT
-        PORT="${PORT:-3210}"
+        if [ "$CAN_PROMPT" = true ]; then
+            PORT=$(read_input "Port [3210]: " "3210")
+        else
+            PORT="3210"
+        fi
     fi
     echo -e "${GREEN}Port: $PORT${NC}"
 
     # Installation directory
-    if [ -z "$INSTALL_DIR_CUSTOM" ]; then
-        read -p "Install directory [$INSTALL_DIR]: " INSTALL_DIR_CUSTOM
-        INSTALL_DIR="${INSTALL_DIR_CUSTOM:-$INSTALL_DIR}"
+    if [ "$CAN_PROMPT" = true ] && [ -z "$INSTALL_DIR_SET" ]; then
+        local new_dir=$(read_input "Install directory [$INSTALL_DIR]: " "$INSTALL_DIR")
+        INSTALL_DIR="$new_dir"
     fi
     echo -e "${GREEN}Install directory: $INSTALL_DIR${NC}"
 
@@ -120,9 +176,8 @@ setup_directory() {
 
     if [ -d "$INSTALL_DIR" ]; then
         echo -e "${YELLOW}Directory $INSTALL_DIR already exists.${NC}"
-        read -p "Do you want to use existing installation? (Y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Nn]$ ]]; then
+        local reply=$(read_char "Do you want to use existing installation? (Y/n) ")
+        if [[ $reply =~ ^[Nn]$ ]]; then
             echo -e "${RED}Aborting installation.${NC}"
             exit 1
         fi
@@ -131,9 +186,8 @@ setup_directory() {
     fi
 
     mkdir -p "$INSTALL_DIR/projects"
-    cd "$INSTALL_DIR"
 
-    echo -e "${GREEN}Directory ready.${NC}"
+    echo -e "${GREEN}Directory ready: $INSTALL_DIR${NC}"
 }
 
 # Create docker-compose file
@@ -169,7 +223,7 @@ volumes:
     name: claude-code-anthropic
 EOF
 
-    echo -e "${GREEN}Configuration created.${NC}"
+    echo -e "${GREEN}Configuration created: $INSTALL_DIR/docker-compose.yml${NC}"
 }
 
 # Create .env file
@@ -191,7 +245,7 @@ PORT=${PORT}
 #ANTHROPIC_API_KEY=sk-ant-...
 EOF
 
-    echo -e "${GREEN}Environment file created.${NC}"
+    echo -e "${GREEN}Environment file created: $INSTALL_DIR/.env${NC}"
 }
 
 # Pull the container image
@@ -285,8 +339,16 @@ print_success() {
         echo -e "${CYAN}                  HTTPS Configuration                      ${NC}"
         echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
         echo ""
-        echo "  For production use, set up a reverse proxy (nginx/traefik/caddy)"
-        echo "  with SSL/TLS certificates for secure access."
+        echo "  For production use with nginx, add this to your server config:"
+        echo ""
+        echo "  location / {"
+        echo "      proxy_pass http://localhost:${PORT};"
+        echo "      proxy_http_version 1.1;"
+        echo "      proxy_set_header Upgrade \$http_upgrade;"
+        echo "      proxy_set_header Connection \"upgrade\";"
+        echo "      proxy_set_header Host \$host;"
+        echo "      proxy_set_header X-Real-IP \$remote_addr;"
+        echo "  }"
         echo ""
     fi
 }
