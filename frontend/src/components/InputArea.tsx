@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { useStore } from '../store';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useSession } from '../hooks/useSession';

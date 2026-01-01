@@ -61,7 +61,7 @@ const generateId = (): string => {
 // Create the store with persistence for settings
 export const useStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Auth
       isAuthenticated: false,
       setAuthenticated: (authenticated) => set({ isAuthenticated: authenticated }),
