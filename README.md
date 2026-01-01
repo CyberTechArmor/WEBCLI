@@ -10,21 +10,40 @@ A self-hosted web interface for Claude Code CLI that provides browser-based acce
 - **Thinking Blocks**: Collapsible thinking blocks to see Claude's reasoning
 - **Permission Handling**: Accept or reject permission requests directly in the UI
 - **Session Management**: Start, stop, and manage Claude Code sessions
-- **Docker-based**: Easy deployment with Docker Compose
+- **Docker-based**: Easy deployment with pre-built container images
 - **Persistent Configuration**: Settings and Claude Code config survive container restarts
 
 ## Quick Start
 
 ### One-Line Install
 
+The installer will prompt you for your domain and port, then pull the pre-built container:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | bash
 ```
 
-Or with your API key:
+Or with pre-configured options:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | ANTHROPIC_API_KEY=sk-ant-... bash
+curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | \
+  DOMAIN=claude.example.com PORT=3210 bash
+```
+
+The installer will:
+1. Prompt for domain (e.g., `localhost` or `claude.example.com`)
+2. Prompt for port (default: `3210`)
+3. Pull the pre-built container from GitHub Container Registry
+4. Start the service
+
+**After installation, configure your API key in the web UI Settings (gear icon).**
+
+### Docker Pull
+
+Pull the container directly:
+
+```bash
+docker pull ghcr.io/cybertecharmor/webcli:latest
 ```
 
 ### Manual Installation
@@ -34,7 +53,47 @@ curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.
 - Docker and Docker Compose
 - Anthropic API key
 
-#### Steps
+#### Using Pre-built Image
+
+1. Create a directory and docker-compose.yml:
+   ```bash
+   mkdir claude-code-web && cd claude-code-web
+   ```
+
+2. Create `docker-compose.yml`:
+   ```yaml
+   version: '3.8'
+   services:
+     claude-code-web:
+       image: ghcr.io/cybertecharmor/webcli:latest
+       container_name: claude-code-web
+       ports:
+         - "3210:3000"
+       volumes:
+         - claude-config:/home/claude/.claude
+         - ./projects:/home/claude/projects
+         - claude-anthropic:/home/claude/.anthropic
+       environment:
+         - DOMAIN=localhost
+       restart: unless-stopped
+       tty: true
+       stdin_open: true
+
+   volumes:
+     claude-config:
+     claude-anthropic:
+   ```
+
+3. Start the container:
+   ```bash
+   docker-compose up -d
+   ```
+
+4. Open your browser to `http://localhost:3210`
+
+5. Click the settings icon and enter your Anthropic API key
+
+#### Building from Source
 
 1. Clone the repository:
    ```bash
@@ -42,56 +101,95 @@ curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.
    cd WEBCLI
    ```
 
-2. Set your API key (optional - can also be set in UI):
+2. Build and start:
    ```bash
-   export ANTHROPIC_API_KEY=sk-ant-...
+   docker-compose -f docker-compose.build.yml up --build -d
    ```
 
-3. Build and start the container:
-   ```bash
-   docker-compose up --build -d
-   ```
+## Container Images
 
-4. Open your browser to `http://localhost:3210`
+Pre-built images are available from GitHub Container Registry:
 
-5. If you didn't set the API key via environment variable, click the settings icon and enter your API key
+| Tag | Description |
+|-----|-------------|
+| `ghcr.io/cybertecharmor/webcli:latest` | Latest stable release |
+| `ghcr.io/cybertecharmor/webcli:main` | Latest from main branch |
+| `ghcr.io/cybertecharmor/webcli:vX.X.X` | Specific version |
 
-6. Start chatting with Claude Code!
+Supported platforms: `linux/amd64`, `linux/arm64`
 
 ## Architecture
 
 ```
 WEBCLI/
-├── Dockerfile              # Container definition
-├── docker-compose.yml      # Docker Compose configuration
-├── install.sh              # One-line installer script
-├── backend/                # Node.js/Express backend
+├── Dockerfile                  # Container definition
+├── docker-compose.yml          # Pre-built image configuration
+├── docker-compose.build.yml    # Build from source configuration
+├── install.sh                  # One-line installer script
+├── .github/workflows/          # GitHub Actions for container builds
+├── backend/                    # Node.js/Express backend
 │   ├── src/
-│   │   ├── index.ts       # Express + WebSocket server
-│   │   ├── session.ts     # Claude process management with node-pty
-│   │   ├── parser.ts      # Output parsing for thinking, tools, etc.
+│   │   ├── index.ts           # Express + WebSocket server
+│   │   ├── session.ts         # Claude process management with node-pty
+│   │   ├── parser.ts          # Output parsing for thinking, tools, etc.
 │   │   ├── routes/
-│   │   │   ├── auth.ts    # Authentication endpoints
-│   │   │   ├── settings.ts # Settings management
-│   │   │   └── session.ts # Session management
-│   │   └── types.ts       # TypeScript types
+│   │   │   ├── auth.ts        # Authentication endpoints
+│   │   │   ├── settings.ts    # Settings management
+│   │   │   └── session.ts     # Session management
+│   │   └── types.ts           # TypeScript types
 │   └── package.json
-├── frontend/               # React frontend
+├── frontend/                   # React frontend
 │   ├── src/
-│   │   ├── App.tsx        # Main app component
-│   │   ├── components/    # UI components
-│   │   │   ├── Header.tsx
-│   │   │   ├── ChatThread.tsx
-│   │   │   ├── MessageList.tsx
-│   │   │   ├── InputArea.tsx
-│   │   │   └── SettingsModal.tsx
-│   │   ├── hooks/         # React hooks
-│   │   │   ├── useWebSocket.ts
-│   │   │   └── useSession.ts
-│   │   └── store/         # Zustand state management
-│   │       └── index.ts
+│   │   ├── App.tsx            # Main app component
+│   │   ├── components/        # UI components
+│   │   ├── hooks/             # React hooks (useWebSocket, useSession)
+│   │   └── store/             # Zustand state management
 │   └── package.json
-└── projects/               # Working directory for projects (mounted volume)
+└── projects/                   # Working directory for projects (mounted volume)
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (can be set in UI) | (none) |
+| `DOMAIN` | Domain/hostname for the web interface | localhost |
+| `PORT` | External port mapping | 3210 |
+| `NODE_ENV` | Environment | production |
+
+### Port Mapping
+
+| External | Internal | Description |
+|----------|----------|-------------|
+| 3210 | 3000 | Web interface |
+
+### Volume Mounts
+
+| Path | Description |
+|------|-------------|
+| `/home/claude/.claude` | Claude Code configuration |
+| `/home/claude/.anthropic` | API credentials |
+| `/home/claude/projects` | Working directory for projects |
+
+## Management Commands
+
+```bash
+# Start the service
+docker-compose up -d
+
+# Stop the service
+docker-compose down
+
+# View logs
+docker-compose logs -f
+
+# Update to latest version
+docker-compose pull && docker-compose up -d
+
+# Restart the service
+docker-compose restart
 ```
 
 ## API Endpoints
@@ -139,16 +237,6 @@ POST /api/session/:id/stop
 
 GET /api/session/:id
   Response: { success: boolean, session: object }
-
-GET /api/sessions
-  Response: { success: boolean, sessions: object[] }
-```
-
-### Projects
-
-```
-GET /api/projects
-  Response: { success: boolean, projects: { name: string, path: string }[] }
 ```
 
 ## WebSocket Protocol
@@ -158,156 +246,79 @@ Connect to `/ws` for real-time communication.
 ### Client to Server Messages
 
 ```typescript
-// Send a message to Claude
 { type: "message", sessionId: string, content: string }
-
-// Interrupt Claude (send Escape)
 { type: "interrupt", sessionId: string }
-
-// Respond to permission request
 { type: "confirm", sessionId: string, response: "y" | "n" }
 ```
 
 ### Server to Client Messages
 
 ```typescript
-// Regular output
 { type: "output", sessionId: string, content: string, streamType: "stdout" | "stderr" }
-
-// Thinking block
 { type: "thinking", sessionId: string, content: string }
-
-// Tool usage
 { type: "toolUse", sessionId: string, tool: string, status: "start" | "end" }
-
-// Permission request
 { type: "permission", sessionId: string, request: string }
-
-// Session ended
 { type: "sessionEnd", sessionId: string, exitCode: number }
-
-// Error
 { type: "error", sessionId: string, message: string }
 ```
 
-## Configuration
+## Development
 
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic API key | (none) |
-| `PORT` | Server port (internal) | 3000 |
-| `NODE_ENV` | Environment | production |
-
-### Port Mapping
-
-| External | Internal | Description |
-|----------|----------|-------------|
-| 3210 | 3000 | Web interface |
-
-### Volume Mounts
-
-| Path | Description |
-|------|-------------|
-| `/home/claude/.claude` | Claude Code configuration |
-| `/home/claude/.anthropic` | API credentials |
-| `/home/claude/projects` | Working directory for projects |
-
-## Management Commands
+### Building from Source
 
 ```bash
-# Start the service
-docker-compose up -d
+# Clone the repository
+git clone https://github.com/CyberTechArmor/WEBCLI.git
+cd WEBCLI
 
-# Stop the service
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Rebuild after updates
-docker-compose up --build -d
-
-# Restart the service
-docker-compose restart
+# Build and run with docker-compose
+docker-compose -f docker-compose.build.yml up --build -d
 ```
-
-## Development
 
 ### Running Locally (without Docker)
 
 1. Install dependencies:
    ```bash
-   # Backend
-   cd backend
-   npm install
-
-   # Frontend
-   cd ../frontend
-   npm install
+   cd backend && npm install
+   cd ../frontend && npm install
    ```
 
 2. Start the backend:
    ```bash
-   cd backend
-   npm run dev
+   cd backend && npm run dev
    ```
 
 3. Start the frontend (in another terminal):
    ```bash
-   cd frontend
-   npm run dev
+   cd frontend && npm run dev
    ```
 
 4. Open `http://localhost:5173`
-
-### Building for Production
-
-```bash
-# Build backend
-cd backend
-npm run build
-
-# Build frontend
-cd ../frontend
-npm run build
-```
 
 ## Troubleshooting
 
 ### Claude Code not found
 
-Make sure Claude Code is installed in the container:
 ```bash
 docker exec -it claude-code-web claude --version
 ```
 
 ### WebSocket connection fails
 
-Check that the backend is running and accessible:
 ```bash
 curl http://localhost:3210/api/health
 ```
 
-### Permission denied errors
-
-Ensure the `claude` user has proper permissions:
-```bash
-docker exec -it claude-code-web ls -la /home/claude
-```
-
 ### Container won't start
 
-Check Docker logs:
 ```bash
 docker-compose logs claude-code-web
 ```
 
 ## Security Considerations
 
-- **API Key Storage**: API keys are stored in the container volume. In production, consider using secrets management.
-- **Network**: The container exposes port 3210. Use a reverse proxy (nginx, traefik) for HTTPS in production.
+- **API Key Storage**: API keys are stored in the container volume. Configure via the web UI for convenience, or use environment variables/secrets for production.
+- **Network**: The container exposes port 3210. Use a reverse proxy (nginx, traefik, caddy) with SSL/TLS for production deployments.
 - **Permissions**: Claude Code runs as a non-root user inside the container.
 
 ## License
