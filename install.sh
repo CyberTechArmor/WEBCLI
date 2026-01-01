@@ -6,8 +6,9 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | bash
 #
-# Or with API key:
-#   curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | ANTHROPIC_API_KEY=sk-ant-... bash
+# Or with options:
+#   curl -fsSL https://raw.githubusercontent.com/CyberTechArmor/WEBCLI/main/install.sh | \
+#     DOMAIN=claude.example.com PORT=3210 bash
 #
 
 set -e
@@ -17,20 +18,23 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
 REPO_URL="https://github.com/CyberTechArmor/WEBCLI.git"
+IMAGE_NAME="ghcr.io/cybertecharmor/webcli:latest"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/claude-code-web}"
-PORT="${PORT:-3210}"
 
 # Print banner
-echo -e "${BLUE}"
-echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║           Claude Code Web Terminal Installer              ║"
-echo "║                 https://github.com/CyberTechArmor/WEBCLI  ║"
-echo "╚═══════════════════════════════════════════════════════════╝"
-echo -e "${NC}"
+print_banner() {
+    echo -e "${BLUE}"
+    echo "╔═══════════════════════════════════════════════════════════╗"
+    echo "║           Claude Code Web Terminal Installer              ║"
+    echo "║           https://github.com/CyberTechArmor/WEBCLI        ║"
+    echo "╚═══════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+}
 
 # Check for required commands
 check_requirements() {
@@ -46,8 +50,8 @@ check_requirements() {
         missing+=("docker-compose")
     fi
 
-    if ! command -v git &> /dev/null; then
-        missing+=("git")
+    if ! command -v curl &> /dev/null; then
+        missing+=("curl")
     fi
 
     if [ ${#missing[@]} -ne 0 ]; then
@@ -56,7 +60,6 @@ check_requirements() {
         echo "Please install the missing tools and try again."
         echo ""
         echo "Docker installation: https://docs.docker.com/get-docker/"
-        echo "Git installation: https://git-scm.com/downloads"
         exit 1
     fi
 
@@ -76,54 +79,142 @@ check_docker() {
     echo -e "${GREEN}Docker is running.${NC}"
 }
 
-# Clone or update repository
-setup_repository() {
-    echo -e "${BLUE}Setting up repository...${NC}"
+# Prompt for configuration
+prompt_configuration() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}                    Configuration                          ${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    # Domain configuration
+    if [ -z "$DOMAIN" ]; then
+        echo -e "${YELLOW}Enter the domain or IP address for accessing the web interface.${NC}"
+        echo -e "${YELLOW}Use 'localhost' for local access only, or your domain/IP for remote access.${NC}"
+        echo ""
+        read -p "Domain [localhost]: " DOMAIN
+        DOMAIN="${DOMAIN:-localhost}"
+    fi
+    echo -e "${GREEN}Domain: $DOMAIN${NC}"
+
+    # Port configuration
+    if [ -z "$PORT" ]; then
+        read -p "Port [3210]: " PORT
+        PORT="${PORT:-3210}"
+    fi
+    echo -e "${GREEN}Port: $PORT${NC}"
+
+    # Installation directory
+    if [ -z "$INSTALL_DIR_CUSTOM" ]; then
+        read -p "Install directory [$INSTALL_DIR]: " INSTALL_DIR_CUSTOM
+        INSTALL_DIR="${INSTALL_DIR_CUSTOM:-$INSTALL_DIR}"
+    fi
+    echo -e "${GREEN}Install directory: $INSTALL_DIR${NC}"
+
+    echo ""
+}
+
+# Setup installation directory
+setup_directory() {
+    echo -e "${BLUE}Setting up installation directory...${NC}"
 
     if [ -d "$INSTALL_DIR" ]; then
         echo -e "${YELLOW}Directory $INSTALL_DIR already exists.${NC}"
-        read -p "Do you want to update it? (y/N) " -n 1 -r
+        read -p "Do you want to use existing installation? (Y/n) " -n 1 -r
         echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "Updating repository..."
-            cd "$INSTALL_DIR"
-            git pull origin main || git pull origin master || true
-        else
-            echo "Using existing installation."
-            cd "$INSTALL_DIR"
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo -e "${RED}Aborting installation.${NC}"
+            exit 1
         fi
     else
-        echo "Cloning repository to $INSTALL_DIR..."
-        git clone "$REPO_URL" "$INSTALL_DIR"
-        cd "$INSTALL_DIR"
+        mkdir -p "$INSTALL_DIR"
     fi
 
-    echo -e "${GREEN}Repository ready.${NC}"
+    mkdir -p "$INSTALL_DIR/projects"
+    cd "$INSTALL_DIR"
+
+    echo -e "${GREEN}Directory ready.${NC}"
 }
 
-# Create .env file if API key is provided
-setup_env() {
-    if [ -n "$ANTHROPIC_API_KEY" ]; then
-        echo -e "${BLUE}Setting up environment...${NC}"
-        echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" > "$INSTALL_DIR/.env"
-        echo -e "${GREEN}API key configured.${NC}"
-    else
-        echo -e "${YELLOW}No API key provided. You can set it in the web UI settings.${NC}"
-    fi
+# Create docker-compose file
+create_compose_file() {
+    echo -e "${BLUE}Creating docker-compose configuration...${NC}"
+
+    cat > "$INSTALL_DIR/docker-compose.yml" << EOF
+version: '3.8'
+
+services:
+  claude-code-web:
+    image: ${IMAGE_NAME}
+    container_name: claude-code-web
+    ports:
+      - "${PORT}:3000"
+    volumes:
+      - claude-config:/home/claude/.claude
+      - ./projects:/home/claude/projects
+      - claude-anthropic:/home/claude/.anthropic
+    environment:
+      - ANTHROPIC_API_KEY=\${ANTHROPIC_API_KEY:-}
+      - NODE_ENV=production
+      - TERM=xterm-256color
+      - DOMAIN=${DOMAIN}
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+
+volumes:
+  claude-config:
+    name: claude-code-config
+  claude-anthropic:
+    name: claude-code-anthropic
+EOF
+
+    echo -e "${GREEN}Configuration created.${NC}"
 }
 
-# Build and start containers
-start_containers() {
-    echo -e "${BLUE}Building and starting containers...${NC}"
+# Create .env file
+create_env_file() {
+    echo -e "${BLUE}Creating environment file...${NC}"
+
+    cat > "$INSTALL_DIR/.env" << EOF
+# Claude Code Web Terminal Configuration
+# Generated by install.sh
+
+# Domain for accessing the web interface
+DOMAIN=${DOMAIN}
+
+# Port for the web interface
+PORT=${PORT}
+
+# Anthropic API Key (optional - can be set in web UI)
+# Uncomment and set your API key here, or configure it in the web interface
+#ANTHROPIC_API_KEY=sk-ant-...
+EOF
+
+    echo -e "${GREEN}Environment file created.${NC}"
+}
+
+# Pull the container image
+pull_image() {
+    echo -e "${BLUE}Pulling container image...${NC}"
     echo "This may take a few minutes on first run..."
+
+    docker pull "$IMAGE_NAME"
+
+    echo -e "${GREEN}Image pulled successfully.${NC}"
+}
+
+# Start containers
+start_containers() {
+    echo -e "${BLUE}Starting containers...${NC}"
 
     cd "$INSTALL_DIR"
 
     # Use docker compose or docker-compose depending on what's available
     if docker compose version &> /dev/null 2>&1; then
-        docker compose up --build -d
+        docker compose up -d
     else
-        docker-compose up --build -d
+        docker-compose up -d
     fi
 
     echo -e "${GREEN}Containers started successfully.${NC}"
@@ -135,9 +226,11 @@ wait_for_service() {
 
     local max_attempts=30
     local attempt=1
+    local url="http://localhost:$PORT/api/health"
 
     while [ $attempt -le $max_attempts ]; do
-        if curl -s "http://localhost:$PORT/api/health" &> /dev/null; then
+        if curl -s "$url" &> /dev/null; then
+            echo ""
             echo -e "${GREEN}Service is ready!${NC}"
             return 0
         fi
@@ -153,18 +246,26 @@ wait_for_service() {
 
 # Print success message
 print_success() {
+    local access_url
+    if [ "$DOMAIN" = "localhost" ]; then
+        access_url="http://localhost:$PORT"
+    else
+        access_url="http://$DOMAIN:$PORT"
+    fi
+
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║           Installation Complete!                          ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "Open your browser to: ${BLUE}http://localhost:$PORT${NC}"
+    echo -e "Access the web interface at: ${BLUE}${access_url}${NC}"
     echo ""
-    if [ -z "$ANTHROPIC_API_KEY" ]; then
-        echo -e "${YELLOW}Don't forget to configure your API key in Settings!${NC}"
-        echo ""
-    fi
-    echo "Useful commands:"
+    echo -e "${YELLOW}Configure your Anthropic API key in the Settings menu (gear icon).${NC}"
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}                    Useful Commands                        ${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
     echo "  cd $INSTALL_DIR"
     echo ""
     echo "  # View logs"
@@ -177,16 +278,29 @@ print_success() {
     echo "  docker-compose restart"
     echo ""
     echo "  # Update to latest version"
-    echo "  git pull && docker-compose up --build -d"
+    echo "  docker-compose pull && docker-compose up -d"
     echo ""
+    if [ "$DOMAIN" != "localhost" ]; then
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${CYAN}                  HTTPS Configuration                      ${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo "  For production use, set up a reverse proxy (nginx/traefik/caddy)"
+        echo "  with SSL/TLS certificates for secure access."
+        echo ""
+    fi
 }
 
 # Main installation flow
 main() {
+    print_banner
     check_requirements
     check_docker
-    setup_repository
-    setup_env
+    prompt_configuration
+    setup_directory
+    create_compose_file
+    create_env_file
+    pull_image
     start_containers
     wait_for_service
     print_success

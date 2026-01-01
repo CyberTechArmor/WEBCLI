@@ -1,8 +1,11 @@
 version: '3.8'
 
+# Use this file for local development/building from source:
+# docker-compose -f docker-compose.build.yml up --build -d
+
 services:
   claude-code-web:
-    image: ghcr.io/cybertecharmor/webcli:latest
+    build: .
     container_name: claude-code-web
     ports:
       - "${PORT:-3210}:3000"
