@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  claude-code-web:
+    build: .
+    container_name: claude-code-web
+    ports:
+      - "3000:3000"
+    volumes:
+      # Claude Code config and settings
+      - claude-config:/home/claude/.claude
+      # Working directory for projects
+      - ./projects:/home/claude/projects
+      # API credentials (if using API key auth)
+      - claude-anthropic:/home/claude/.anthropic
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - NODE_ENV=production
+      - TERM=xterm-256color
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+
+volumes:
+  claude-config:
+    name: claude-code-config
+  claude-anthropic:
+    name: claude-code-anthropic
